@@ -1,0 +1,101 @@
+name: Android CI/CD
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build & Release
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      # 1️⃣ Checkout repo
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      # 2️⃣ Set up Java
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      # 3️⃣ Set up Flutter
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          architecture: x64
+          cache: true
+
+      # 4️⃣ Decode keystore and create key.properties
+      - name: Decode keystore
+        run: |
+          mkdir -p android/app
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > android/app/my-release-key.jks
+          echo "storePassword=${{ secrets.KEYSTORE_PASSWORD }}" > android/key.properties
+          echo "keyPassword=${{ secrets.KEY_PASSWORD }}" >> android/key.properties
+          echo "keyAlias=${{ secrets.KEY_ALIAS }}" >> android/key.properties
+          echo "storeFile=my-release-key.jks" >> android/key.properties
+          # ✅ keep key.properties in android/ (default Gradle location)
+
+      # 5️⃣ Set dynamic version
+      - name: Set dynamic version
+        run: |
+         VERSION_NAME="1.0.${{ github.run_number }}"
+         VERSION_CODE="${{ github.run_number }}"
+
+         echo "Setting version: $VERSION_NAME+$VERSION_CODE"
+
+         # Update pubspec.yaml version
+         sed -i "s/^version:.*/version: $VERSION_NAME+$VERSION_CODE/" pubspec.yaml
+
+         # Export for later steps (like upload-google-play)
+         echo "VERSION_NAME=$VERSION_NAME" >> $GITHUB_ENV
+         echo "VERSION_CODE=$VERSION_CODE" >> $GITHUB_ENV
+
+
+      # 6️⃣ Clean project & get dependencies
+      - name: Clean and Get dependencies
+        run: |
+          flutter clean
+          flutter pub get
+
+      # 7️⃣ Build release APKs and AAB
+      - name: Build APK & AAB
+        # run: |
+        #   flutter build apk --release --split-per-abi
+        #   flutter build appbundle --release
+        #     - name: Build APK & AAB
+        run: |
+          flutter build apk --release --split-per-abi \
+            --build-name=$VERSION_NAME --build-number=$VERSION_CODE
+          flutter build appbundle --release \
+            --build-name=$VERSION_NAME --build-number=$VERSION_CODE
+
+
+      # 8️⃣ Upload App Bundle to Google Play Internal Testing
+      - name: Upload to Play Store Internal Testing
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAYSTORE_SERVICE_ACCOUNT }}
+          packageName: ${{ secrets.PACKAGE_NAME }}
+          releaseFiles: build/app/outputs/bundle/release/*.aab
+          track: internal
+          status: completed
+
+      # 9️⃣ Upload APKs & AAB to GitHub Release
+      - name: Upload Android artifacts to GitHub Release
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: |
+            build/app/outputs/flutter-apk/*.apk
+            build/app/outputs/bundle/release/*.aab
+          tag: v1.0.${{ github.run_number }}
+          token: ${{ secrets.GITHUB_TOKEN }}

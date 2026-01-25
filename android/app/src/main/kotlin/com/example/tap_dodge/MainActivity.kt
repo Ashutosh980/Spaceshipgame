@@ -1,4 +1,4 @@
-package com.example.tap_dodge
+package com.ace.galaxyfighter
 
 import io.flutter.embedding.android.FlutterActivity
 
