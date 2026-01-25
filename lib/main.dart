@@ -95,10 +95,6 @@ void onPanStart(DragStartInfo info) {
     }
   }
 
-  // void gameOver() {
-  //   isGameOver = true;
-  //   add(gameOverText);
-  // }
 void restart() {
   overlays.remove('GameOver');
   resumeEngine();
@@ -110,13 +106,6 @@ void restart() {
   player.reset();
 }
 
-  // void restart() {
-  //   children.whereType<Obstacle>().forEach((o) => o.removeFromParent());
-  //   gameOverText.removeFromParent();
-  //   score = 0;
-  //   isGameOver = false;
-  //   player.reset();
-  // }
 }
 
 class Player extends SpriteComponent
@@ -230,39 +219,6 @@ class Asteroid extends SpriteComponent
     }
   }
 }
-
-
-
-// class Obstacle extends RectangleComponent
-//     with CollisionCallbacks, HasGameRef<TapDodgeGame> {
-//   final double speed;
-
-//   Obstacle(double screenWidth)
-//       : speed = 200 + Random().nextDouble() * 200,
-//         super(
-//           size: Vector2(40, 40),
-//           position: Vector2(
-//             Random().nextDouble() * (screenWidth - 40),
-//             -40,
-//           ),
-//           paint: Paint()..color = Colors.red,
-//         );
-
-//   @override
-//   Future<void> onLoad() async {
-//     add(RectangleHitbox());
-//   }
-
-//   @override
-//   void update(double dt) {
-//     super.update(dt);
-//     position.y += speed * dt;
-
-//     if (position.y > gameRef.size.y) {
-//       removeFromParent();
-//     }
-//   }
-// }
 
 
 class GameOverOverlay extends StatelessWidget {
