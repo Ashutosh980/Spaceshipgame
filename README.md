@@ -1,4 +1,4 @@
-# tap_dodge
+# Galaxy Fighter
 
 A new Flutter project.
 

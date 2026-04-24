@@ -1,0 +1,20 @@
+{
+  "buildFiles": [
+    "/Users/stoxbox/Documents/flutter/packages/flutter_tools/gradle/src/main/groovy/CMakeLists.txt"
+  ],
+  "cleanCommandsComponents": [
+    [
+      "/Users/stoxbox/Library/Android/sdk/cmake/3.22.1/bin/ninja",
+      "-C",
+      "/Users/stoxbox/Desktop/Ashutosh/flutterflame/GalaxyFigterGame/android/app/.cxx/Debug/59264n10/armeabi-v7a",
+      "clean"
+    ]
+  ],
+  "buildTargetsCommandComponents": [
+    "/Users/stoxbox/Library/Android/sdk/cmake/3.22.1/bin/ninja",
+    "-C",
+    "/Users/stoxbox/Desktop/Ashutosh/flutterflame/GalaxyFigterGame/android/app/.cxx/Debug/59264n10/armeabi-v7a",
+    "{LIST_OF_TARGETS_TO_BUILD}"
+  ],
+  "libraries": {}
+}
