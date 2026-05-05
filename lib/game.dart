@@ -4,9 +4,12 @@ import 'package:flame/game.dart';
 import 'package:flame/components.dart';
 import 'package:flame/collisions.dart';
 import 'package:flutter/material.dart';
+import 'package:flame_audio/flame_audio.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'utils/storage_service.dart';
 import 'utils/remote_config_service.dart';
 import 'utils/analytics_service.dart';
+import 'utils/settings_provider.dart';
 import 'components/player.dart';
 import 'components/asteroid.dart';
 import 'components/bullet.dart';
@@ -42,6 +45,12 @@ class GalaxyFighterGame extends FlameGame
 
     // Load local high score on start
     highScore = StorageService().getHighScore();
+
+    // Preload audio and start BGM if enabled
+    await FlameAudio.audioCache.loadAll(['shoot.wav', 'explosion.wav', 'bgm.mp3']);
+    if (SettingsProvider.instance.musicEnabled) {
+      FlameAudio.bgm.play('bgm.mp3', volume: 0.5);
+    }
 
     add(Background());
     add(StarField());
@@ -94,6 +103,12 @@ class GalaxyFighterGame extends FlameGame
     add(livesText);
   }
 
+  void playSfx(String file) {
+    if (SettingsProvider.instance.sfxEnabled) {
+      FlameAudio.play(file, volume: 0.6);
+    }
+  }
+
   void onAsteroidDestroyed() {
     if (state != GameState.playing) return;
     destroyedCount++;
@@ -113,6 +128,16 @@ class GalaxyFighterGame extends FlameGame
       highScore = score;
       StorageService().setHighScore(highScore);
     }
+
+    // Add score to Hall of Fame list
+    SharedPreferences.getInstance().then((prefs) {
+      List<String> scores = prefs.getStringList('top_scores') ?? [];
+      scores.add(score.toString());
+      List<int> intScores = scores.map(int.parse).toList();
+      intScores.sort((a, b) => b.compareTo(a));
+      if (intScores.length > 10) intScores = intScores.sublist(0, 10);
+      prefs.setStringList('top_scores', intScores.map((e) => e.toString()).toList());
+    });
     
     // Log Game Over to Analytics
     AnalyticsService.instance.logGameOver(

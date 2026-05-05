@@ -50,6 +50,8 @@ class Player extends SpriteComponent
     if (shootCooldown > 0) return;
     shootCooldown = shootInterval;
 
+    gameRef.playSfx('shoot.wav');
+
     if (hasMultiShot) {
       gameRef.add(Bullet(position: position.clone() + Vector2(-15, -40)));
       gameRef.add(Bullet(position: position.clone() + Vector2(0, -50)));

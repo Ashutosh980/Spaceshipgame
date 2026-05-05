@@ -19,6 +19,7 @@ class RemoteConfigService {
       await _remoteConfig.setDefaults(const {
         'min_version': '1.0.0',
         'base_difficulty': 1,
+        'special_events': '[{"title": "Welcome Pilot", "description": "Defeat the invading aliens!", "imageUrl": ""}]',
       });
       await _remoteConfig.fetchAndActivate();
     } catch (e, stackTrace) {
@@ -34,6 +35,10 @@ class RemoteConfigService {
 
   int get baseDifficulty {
     return _remoteConfig.getInt('base_difficulty');
+  }
+
+  String get specialEventsJson {
+    return _remoteConfig.getString('special_events');
   }
 
   Future<void> checkForUpdate(BuildContext context) async {

@@ -60,6 +60,7 @@ class Bullet extends PositionComponent
     if (other is Asteroid) {
       other.health--;
       if (other.health <= 0) {
+        gameRef.playSfx('explosion.wav');
         // Spawn explosion at asteroid position
         gameRef.add(Explosion(position: other.position.clone()));
         other.removeFromParent();
