@@ -18,6 +18,7 @@ class RemoteConfigService {
       ));
       await _remoteConfig.setDefaults(const {
         'min_version': '1.0.0',
+        'base_difficulty': 1,
       });
       await _remoteConfig.fetchAndActivate();
     } catch (e, stackTrace) {
@@ -31,6 +32,10 @@ class RemoteConfigService {
     }
   }
 
+  int get baseDifficulty {
+    return _remoteConfig.getInt('base_difficulty');
+  }
+
   Future<void> checkForUpdate(BuildContext context) async {
     final minVersionStr = _remoteConfig.getString('min_version');
     if (minVersionStr.isEmpty) return;
@@ -38,7 +43,9 @@ class RemoteConfigService {
     final packageInfo = await PackageInfo.fromPlatform();
     final currentVersionStr = packageInfo.version;
 
-    if (_isUpdateRequired(currentVersionStr, minVersionStr)) {
+    if (
+      _isUpdateRequired(currentVersionStr, minVersionStr)
+    ) {
       if (context.mounted) {
         _showForceUpdateDialog(context);
       }

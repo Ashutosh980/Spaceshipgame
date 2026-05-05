@@ -1,13 +1,14 @@
+import 'dart:ui';
+
 import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
-import 'package:firebase_remote_config/firebase_remote_config.dart';
-import 'firebase_options.dart';
-import 'storage_service.dart';
+import 'utils/firebase_options.dart';
+import 'utils/remote_config_service.dart';
+import 'utils/storage_service.dart';
 import 'game.dart';
 
 void main() async {
@@ -15,35 +16,63 @@ void main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-  
-  // Initialize Storage Service
+
+  // Pass all uncaught "fatal" errors from the framework to Crashlytics
+  FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
+  // Pass all uncaught asynchronous errors that aren't handled by the Flutter framework to Crashlytics
+  PlatformDispatcher.instance.onError = (error, stack) {
+    FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+    return true;
+  };
+
+  // Initialize Services
   await StorageService().init();
+  await RemoteConfigService.instance.initialize();
   
   SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
 
   runApp(
-    GameWidget(
-      game: GalaxyFighterGame(),
-      initialActiveOverlays: const ['MainMenu'],
-      overlayBuilderMap: {
-        'MainMenu': (context, game) {
-          return MainMenuOverlay(game: game as GalaxyFighterGame);
+    MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: GameWidget(
+        game: GalaxyFighterGame(),
+        initialActiveOverlays: const ['MainMenu'],
+        overlayBuilderMap: {
+          'MainMenu': (context, game) {
+            return MainMenuOverlay(game: game as GalaxyFighterGame);
+          },
+          'GameOver': (context, game) {
+            return GameOverOverlay(game: game as GalaxyFighterGame);
+          },
         },
-        'GameOver': (context, game) {
-          return GameOverOverlay(game: game as GalaxyFighterGame);
-        },
-      },
+      ),
     ),
   );
 }
 
-class MainMenuOverlay extends StatelessWidget {
+class MainMenuOverlay extends StatefulWidget {
   final GalaxyFighterGame game;
 
   const MainMenuOverlay({super.key, required this.game});
 
   @override
+  State<MainMenuOverlay> createState() => _MainMenuOverlayState();
+}
+
+class _MainMenuOverlayState extends State<MainMenuOverlay> {
+  @override
+  void initState() {
+    super.initState();
+    // Check for updates after the first frame is rendered to ensure
+    // context is available for showing a dialog.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        RemoteConfigService.instance.checkForUpdate(context);
+      }
+    });
+  }
+
   Widget build(BuildContext context) {
     return Material(
       color: Colors.transparent,
@@ -76,7 +105,7 @@ class MainMenuOverlay extends StatelessWidget {
             ),
             const SizedBox(height: 50),
             GestureDetector(
-              onTap: game.restart,
+              onTap: widget.game.restart,
               child: Container(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 50, vertical: 16),

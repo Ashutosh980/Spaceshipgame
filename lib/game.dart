@@ -4,9 +4,9 @@ import 'package:flame/game.dart';
 import 'package:flame/components.dart';
 import 'package:flame/collisions.dart';
 import 'package:flutter/material.dart';
-import 'package:firebase_analytics/firebase_analytics.dart';
-import 'package:firebase_remote_config/firebase_remote_config.dart';
-import 'storage_service.dart';
+import 'utils/storage_service.dart';
+import 'utils/remote_config_service.dart';
+import 'utils/analytics_service.dart';
 import 'components/player.dart';
 import 'components/asteroid.dart';
 import 'components/bullet.dart';
@@ -37,8 +37,7 @@ class GalaxyFighterGame extends FlameGame
   @override
   Future<void> onLoad() async {
     // Apply Remote Config Values
-    final remoteConfig = FirebaseRemoteConfig.instance;
-    difficultyLevel = remoteConfig.getInt('base_difficulty');
+    difficultyLevel = RemoteConfigService.instance.baseDifficulty;
     if (difficultyLevel < 1) difficultyLevel = 1;
 
     // Load local high score on start
@@ -116,13 +115,10 @@ class GalaxyFighterGame extends FlameGame
     }
     
     // Log Game Over to Analytics
-    FirebaseAnalytics.instance.logEvent(
-      name: 'game_over',
-      parameters: {
-        'score': score,
-        'destroyed_count': destroyedCount,
-        'reached_level': difficultyLevel,
-      },
+    AnalyticsService.instance.logGameOver(
+      score: score,
+      destroyedCount: destroyedCount,
+      reachedLevel: difficultyLevel,
     );
 
     overlays.add('GameOver');
@@ -171,10 +167,7 @@ class GalaxyFighterGame extends FlameGame
       difficultyTimer = 0;
 
       // Log level up
-      FirebaseAnalytics.instance.logEvent(
-        name: 'level_up',
-        parameters: {'level': difficultyLevel},
-      );
+      AnalyticsService.instance.logLevelUp(difficultyLevel);
     }
 
     // Spawn asteroids
@@ -212,7 +205,7 @@ class GalaxyFighterGame extends FlameGame
     combo = 0;
     comboTimer = 0;
     destroyedCount = 0;
-    difficultyLevel = FirebaseRemoteConfig.instance.getInt('base_difficulty');
+    difficultyLevel = RemoteConfigService.instance.baseDifficulty;
     if (difficultyLevel < 1) difficultyLevel = 1;
     difficultyTimer = 0;
     powerUpTimer = 0;
@@ -234,7 +227,7 @@ class GalaxyFighterGame extends FlameGame
     combo = 0;
     comboTimer = 0;
     destroyedCount = 0;
-    difficultyLevel = FirebaseRemoteConfig.instance.getInt('base_difficulty');
+    difficultyLevel = RemoteConfigService.instance.baseDifficulty;
     if (difficultyLevel < 1) difficultyLevel = 1;
     difficultyTimer = 0;
     powerUpTimer = 0;
