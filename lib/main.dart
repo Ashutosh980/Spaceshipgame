@@ -1,10 +1,24 @@
 import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_analytics/firebase_analytics.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
+import 'package:firebase_remote_config/firebase_remote_config.dart';
+import 'firebase_options.dart';
+import 'storage_service.dart';
 import 'game.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+  
+  // Initialize Storage Service
+  await StorageService().init();
+  
   SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
 
@@ -49,6 +63,17 @@ class MainMenuOverlay extends StatelessWidget {
                 shadows: [Shadow(color: Color(0xFF00E5FF), blurRadius: 20)],
               ),
             ),
+            const SizedBox(height: 16),
+            // Personal Best / High Score
+            Text(
+              'HIGH SCORE: ${StorageService().getHighScore()}',
+              style: const TextStyle(
+                color: Color(0xFFFFAB00),
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 2,
+              ),
+            ),
             const SizedBox(height: 50),
             GestureDetector(
               onTap: game.restart,
@@ -77,6 +102,18 @@ class MainMenuOverlay extends StatelessWidget {
                 ),
               ),
             ),
+            // Wrap debug features in kDebugMode to exclude them from release builds
+            if (kDebugMode) ...[
+              const SizedBox(height: 20),
+              // QA Crash Test Button
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+                onPressed: () {
+                  FirebaseCrashlytics.instance.crash();
+                },
+                child: const Text('FORCE CRASH', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              ),
+            ],
           ],
         ),
       ),
@@ -146,38 +183,43 @@ class GameOverOverlay extends StatelessWidget {
               _statRow(
                   'LEVEL', '${game.difficultyLevel}', const Color(0xFF00E676)),
               const SizedBox(height: 28),
-              GestureDetector(
-                onTap: game.restart,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 40,
-                    vertical: 14,
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  GestureDetector(
+                    onTap: game.restart,
+                    child: _buildButton('🚀 RESTART', const [Color(0xFF00B0FF), Color(0xFF00E5FF)]),
                   ),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF00B0FF), Color(0xFF00E5FF)],
-                    ),
-                    borderRadius: BorderRadius.circular(30),
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xFF00E5FF).withAlpha(100),
-                        blurRadius: 16,
-                      ),
-                    ],
+                  // Target overlay for later 'Music' and 'Leaderboards' integrations
+                  GestureDetector(
+                    onTap: game.goToMainMenu,
+                    child: _buildButton('🏠 MENU', const [Color(0xFF651FFF), Color(0xFF00E676)]),
                   ),
-                  child: const Text(
-                    '🚀 RESTART',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 2,
-                    ),
-                  ),
-                ),
+                ],
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildButton(String text, List<Color> gradientColors) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(colors: gradientColors),
+        borderRadius: BorderRadius.circular(30),
+        boxShadow: [
+          BoxShadow(color: gradientColors.last.withAlpha(100), blurRadius: 16),
+        ],
+      ),
+      child: Text(
+        text,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 16,
+          fontWeight: FontWeight.bold,
         ),
       ),
     );

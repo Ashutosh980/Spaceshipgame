@@ -4,6 +4,9 @@ import 'package:flame/game.dart';
 import 'package:flame/components.dart';
 import 'package:flame/collisions.dart';
 import 'package:flutter/material.dart';
+import 'package:firebase_analytics/firebase_analytics.dart';
+import 'package:firebase_remote_config/firebase_remote_config.dart';
+import 'storage_service.dart';
 import 'components/player.dart';
 import 'components/asteroid.dart';
 import 'components/bullet.dart';
@@ -33,6 +36,14 @@ class GalaxyFighterGame extends FlameGame
 
   @override
   Future<void> onLoad() async {
+    // Apply Remote Config Values
+    final remoteConfig = FirebaseRemoteConfig.instance;
+    difficultyLevel = remoteConfig.getInt('base_difficulty');
+    if (difficultyLevel < 1) difficultyLevel = 1;
+
+    // Load local high score on start
+    highScore = StorageService().getHighScore();
+
     add(Background());
     add(StarField());
 
@@ -99,7 +110,21 @@ class GalaxyFighterGame extends FlameGame
   void gameOver() {
     if (state == GameState.gameOver) return;
     state = GameState.gameOver;
-    if (score > highScore) highScore = score;
+    if (score > highScore) {
+      highScore = score;
+      StorageService().setHighScore(highScore);
+    }
+    
+    // Log Game Over to Analytics
+    FirebaseAnalytics.instance.logEvent(
+      name: 'game_over',
+      parameters: {
+        'score': score,
+        'destroyed_count': destroyedCount,
+        'reached_level': difficultyLevel,
+      },
+    );
+
     overlays.add('GameOver');
   }
 
@@ -144,6 +169,12 @@ class GalaxyFighterGame extends FlameGame
     if (difficultyTimer > 15) {
       difficultyLevel++;
       difficultyTimer = 0;
+
+      // Log level up
+      FirebaseAnalytics.instance.logEvent(
+        name: 'level_up',
+        parameters: {'level': difficultyLevel},
+      );
     }
 
     // Spawn asteroids
@@ -167,6 +198,28 @@ class GalaxyFighterGame extends FlameGame
     }
   }
 
+  void goToMainMenu() {
+    overlays.remove('GameOver');
+    overlays.add('MainMenu');
+
+    // Clear the active elements
+    children.whereType<Asteroid>().forEach((o) => o.removeFromParent());
+    children.whereType<Bullet>().forEach((b) => b.removeFromParent());
+    children.whereType<Explosion>().forEach((e) => e.removeFromParent());
+    children.whereType<PowerUp>().forEach((p) => p.removeFromParent());
+
+    score = 0;
+    combo = 0;
+    comboTimer = 0;
+    destroyedCount = 0;
+    difficultyLevel = FirebaseRemoteConfig.instance.getInt('base_difficulty');
+    if (difficultyLevel < 1) difficultyLevel = 1;
+    difficultyTimer = 0;
+    powerUpTimer = 0;
+    spawnTimer = 0;
+    state = GameState.menu;
+  }
+
   void restart() {
     overlays.remove('GameOver');
     overlays.remove('MainMenu');
@@ -181,7 +234,8 @@ class GalaxyFighterGame extends FlameGame
     combo = 0;
     comboTimer = 0;
     destroyedCount = 0;
-    difficultyLevel = 1;
+    difficultyLevel = FirebaseRemoteConfig.instance.getInt('base_difficulty');
+    if (difficultyLevel < 1) difficultyLevel = 1;
     difficultyTimer = 0;
     powerUpTimer = 0;
     spawnTimer = 0;

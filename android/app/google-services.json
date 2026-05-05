@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "307570190949",
+    "project_id": "galaxy-fighter-2ede8",
+    "storage_bucket": "galaxy-fighter-2ede8.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:307570190949:android:40e1ff2754398fcb1d348c",
+        "android_client_info": {
+          "package_name": "com.ace.galaxyfighter"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAL-J-5FOlO1tGbJmDKh4hE91Bw3cLeZG0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
