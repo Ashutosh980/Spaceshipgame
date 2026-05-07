@@ -38,22 +38,33 @@ void main() async {
   SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
 
+  final game = GalaxyFighterGame();
+
   runApp(
     ChangeNotifierProvider.value(
       value: settingsProvider,
       child: MaterialApp(
         debugShowCheckedModeBanner: false,
-        home: GameWidget(
-          game: GalaxyFighterGame(),
-          initialActiveOverlays: const ['MainMenu'],
-          overlayBuilderMap: {
-            'MainMenu': (context, game) {
-              return MainMenuOverlay(game: game as GalaxyFighterGame);
-            },
-            'GameOver': (context, game) {
-              return GameOverOverlay(game: game as GalaxyFighterGame);
-            },
+        home: PopScope(
+          canPop: false, // Prevents instant exit
+          onPopInvokedWithResult: (didPop, result) {
+            if (didPop) return;
+            // Swipe back or back button pauses/resumes the game
+            if (game.state == GameState.playing) {
+              game.pauseGame();
+            } else if (game.state == GameState.paused) {
+              game.resumeGame();
+            }
           },
+          child: GameWidget(
+            game: game,
+            initialActiveOverlays: const ['MainMenu'],
+            overlayBuilderMap: {
+              'MainMenu': (context, game) => MainMenuOverlay(game: game as GalaxyFighterGame),
+              'GameOver': (context, game) => GameOverOverlay(game: game as GalaxyFighterGame),
+              'PauseMenu': (context, game) => PauseMenuOverlay(game: game as GalaxyFighterGame),
+            },
+          ),
         ),
       ),
     ),
@@ -70,9 +81,12 @@ class MainMenuOverlay extends StatefulWidget {
 }
 
 class _MainMenuOverlayState extends State<MainMenuOverlay> {
+  bool _hasSavedGame = false;
+
   @override
   void initState() {
     super.initState();
+    _checkSavedGame();
     // Check for updates after the first frame is rendered to ensure
     // context is available for showing a dialog.
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -80,6 +94,15 @@ class _MainMenuOverlayState extends State<MainMenuOverlay> {
         RemoteConfigService.instance.checkForUpdate(context);
       }
     });
+  }
+
+  Future<void> _checkSavedGame() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (mounted) {
+      setState(() {
+        _hasSavedGame = prefs.getBool('has_saved_game') ?? false;
+      });
+    }
   }
 
   void _showSettingsDialog(BuildContext context) {
@@ -238,6 +261,14 @@ class _MainMenuOverlayState extends State<MainMenuOverlay> {
             ),
             const SizedBox(height: 40),
             
+            if (widget.game.state == GameState.paused || _hasSavedGame)
+              _MenuButton(
+                title: 'RESUME GAME',
+                color: const Color(0xFF00B0FF),
+                onTap: () {
+                  widget.game.resumeFromMenu();
+                },
+              ),
             _MenuButton(
               title: 'START GAME',
               color: const Color(0xFF00E5FF),
@@ -271,6 +302,95 @@ class _MainMenuOverlayState extends State<MainMenuOverlay> {
               ),
             ],
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class PauseMenuOverlay extends StatelessWidget {
+  final GalaxyFighterGame game;
+
+  const PauseMenuOverlay({super.key, required this.game});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.black.withAlpha(180),
+      child: Center(
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 40),
+          padding: const EdgeInsets.all(32),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                const Color(0xFF0D1B2A).withAlpha(240),
+                const Color(0xFF1B263B).withAlpha(240),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: const Color(0xFF00E676).withAlpha(100),
+              width: 2,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF00E676).withAlpha(40),
+                blurRadius: 30,
+                spreadRadius: 5,
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                '⏸ PAUSED',
+                style: TextStyle(
+                  color: Color(0xFF00E676),
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 3,
+                  shadows: [Shadow(color: Color(0xFF00E676), blurRadius: 20)],
+                ),
+              ),
+              const SizedBox(height: 40),
+              GestureDetector(
+                onTap: game.resumeGame,
+                child: _buildButton('▶ RESUME', const [Color(0xFF00B0FF), Color(0xFF00E5FF)]),
+              ),
+              const SizedBox(height: 20),
+              GestureDetector(
+                onTap: game.goToMainMenu,
+                child: _buildButton('🏠 MAIN MENU', const [Color(0xFF651FFF), Color(0xFF00E676)]),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildButton(String text, List<Color> gradientColors) {
+    return Container(
+      width: double.infinity,
+      alignment: Alignment.center,
+      padding: const EdgeInsets.symmetric(vertical: 14),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(colors: gradientColors),
+        borderRadius: BorderRadius.circular(30),
+        boxShadow: [
+          BoxShadow(color: gradientColors.last.withAlpha(100), blurRadius: 16),
+        ],
+      ),
+      child: Text(
+        text,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 16,
+          fontWeight: FontWeight.bold,
         ),
       ),
     );

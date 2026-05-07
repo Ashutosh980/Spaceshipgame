@@ -1,5 +1,6 @@
 import 'package:firebase_remote_config/firebase_remote_config.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
+import 'package:flutter/foundation.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -52,7 +53,10 @@ class RemoteConfigService {
       _isUpdateRequired(currentVersionStr, minVersionStr)
     ) {
       if (context.mounted) {
-        _showForceUpdateDialog(context);
+        if(!kDebugMode){
+       _showForceUpdateDialog(context);
+        }
+       
       }
     }
   }

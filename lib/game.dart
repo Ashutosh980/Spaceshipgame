@@ -3,6 +3,7 @@ import 'package:flame/events.dart';
 import 'package:flame/game.dart';
 import 'package:flame/components.dart';
 import 'package:flame/collisions.dart';
+import 'package:flame/input.dart';
 import 'package:flutter/material.dart';
 import 'package:flame_audio/flame_audio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -17,10 +18,10 @@ import 'components/explosion.dart';
 import 'components/power_up.dart';
 import 'components/background.dart';
 
-enum GameState { menu, playing, gameOver }
+enum GameState { menu, playing, paused, gameOver }
 
 class GalaxyFighterGame extends FlameGame
-    with PanDetector, HasCollisionDetection {
+    with PanDetector, TapDetector, HasCollisionDetection {
   late Player player;
   double spawnTimer = 0;
   int score = 0;
@@ -36,6 +37,12 @@ class GalaxyFighterGame extends FlameGame
   late TextComponent scoreText;
   late TextComponent comboText;
   late TextComponent livesText;
+  late TextComponent pauseButtonText;
+
+  late AudioPool shootPool;
+  late AudioPool explosionPool;
+
+  bool hasSavedGame = false;
 
   @override
   Future<void> onLoad() async {
@@ -46,8 +53,15 @@ class GalaxyFighterGame extends FlameGame
     // Load local high score on start
     highScore = StorageService().getHighScore();
 
+    final prefs = await SharedPreferences.getInstance();
+    hasSavedGame = prefs.getBool('has_saved_game') ?? false;
+
     // Preload audio and start BGM if enabled
     await FlameAudio.audioCache.loadAll(['shoot.wav', 'explosion.wav', 'bgm.mp3']);
+
+    shootPool = await FlameAudio.createPool('shoot.wav', minPlayers: 3, maxPlayers: 10);
+    explosionPool = await FlameAudio.createPool('explosion.wav', minPlayers: 3, maxPlayers: 10);
+
     if (SettingsProvider.instance.musicEnabled) {
       FlameAudio.bgm.play('bgm.mp3', volume: 0.5);
     }
@@ -101,11 +115,31 @@ class GalaxyFighterGame extends FlameGame
       ),
     );
     add(livesText);
+
+    pauseButtonText = TextComponent(
+      text: '',
+      position: Vector2(size.x / 2, 20),
+      anchor: Anchor.topCenter,
+      textRenderer: TextPaint(
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 26,
+          shadows: [Shadow(color: Colors.white, blurRadius: 6)],
+        ),
+      ),
+    );
+    add(pauseButtonText);
   }
 
   void playSfx(String file) {
     if (SettingsProvider.instance.sfxEnabled) {
-      FlameAudio.play(file, volume: 0.6);
+      if (file == 'shoot.wav') {
+        shootPool.start(volume: 0.6);
+      } else if (file == 'explosion.wav') {
+        explosionPool.start(volume: 0.6);
+      } else {
+        FlameAudio.play(file, volume: 0.6);
+      }
     }
   }
 
@@ -124,6 +158,7 @@ class GalaxyFighterGame extends FlameGame
   void gameOver() {
     if (state == GameState.gameOver) return;
     state = GameState.gameOver;
+    clearGameState();
     if (score > highScore) {
       highScore = score;
       StorageService().setHighScore(highScore);
@@ -150,6 +185,19 @@ class GalaxyFighterGame extends FlameGame
   }
 
   @override
+  void onTapDown(TapDownInfo info) {
+    if (state == GameState.playing) {
+      final touchPoint = info.eventPosition.global;
+      // Check if tap is in the top center where the pause button is
+      if (touchPoint.x > size.x / 2 - 40 &&
+          touchPoint.x < size.x / 2 + 40 &&
+          touchPoint.y < 60) {
+        pauseGame();
+      }
+    }
+  }
+
+  @override
   void onPanUpdate(DragUpdateInfo info) {
     if (state != GameState.playing) return;
     player.moveBy(info.delta.global.x, info.delta.global.y);
@@ -166,15 +214,17 @@ class GalaxyFighterGame extends FlameGame
   void update(double dt) {
     super.update(dt);
     
-    if (state != GameState.playing) {
+    if (state != GameState.playing && state != GameState.paused) {
       scoreText.text = '';
       livesText.text = '';
       comboText.text = '';
+      pauseButtonText.text = '';
       return;
     }
 
     scoreText.text = 'SCORE: $score';
     livesText.text = '♥' * player.lives;
+    pauseButtonText.text = '⏸';
 
     // Combo timer
     if (comboTimer > 0) {
@@ -216,37 +266,81 @@ class GalaxyFighterGame extends FlameGame
     }
   }
 
+  void saveGameState() {
+    hasSavedGame = true;
+    SharedPreferences.getInstance().then((prefs) {
+      prefs.setBool('has_saved_game', true);
+      prefs.setInt('saved_score', score);
+      prefs.setInt('saved_lives', player.lives);
+      prefs.setInt('saved_difficulty', difficultyLevel);
+      prefs.setInt('saved_destroyed', destroyedCount);
+    });
+  }
+
+  void clearGameState() {
+    hasSavedGame = false;
+    SharedPreferences.getInstance().then((prefs) {
+      prefs.setBool('has_saved_game', false);
+    });
+  }
+
+  Future<void> loadGameState() async {
+    final prefs = await SharedPreferences.getInstance();
+    score = prefs.getInt('saved_score') ?? 0;
+    player.lives = prefs.getInt('saved_lives') ?? 3;
+    difficultyLevel = prefs.getInt('saved_difficulty') ?? 1;
+    destroyedCount = prefs.getInt('saved_destroyed') ?? 0;
+  }
+
+  void pauseGame() {
+    if (state == GameState.playing) {
+      state = GameState.paused;
+      pauseEngine();
+      saveGameState();
+      overlays.add('PauseMenu');
+    }
+  }
+
+  void resumeGame() {
+    if (state == GameState.paused) {
+      state = GameState.playing;
+      resumeEngine();
+      overlays.remove('PauseMenu');
+    }
+  }
+
+  void resumeFromMenu() async {
+    if (state == GameState.menu && hasSavedGame) {
+      await loadGameState();
+    }
+    state = GameState.playing;
+    resumeEngine();
+    overlays.remove('MainMenu');
+    overlays.remove('PauseMenu');
+  }
+
   void goToMainMenu() {
     overlays.remove('GameOver');
+    overlays.remove('PauseMenu');
     overlays.add('MainMenu');
-
-    // Clear the active elements
-    children.whereType<Asteroid>().forEach((o) => o.removeFromParent());
-    children.whereType<Bullet>().forEach((b) => b.removeFromParent());
-    children.whereType<Explosion>().forEach((e) => e.removeFromParent());
-    children.whereType<PowerUp>().forEach((p) => p.removeFromParent());
-
-    score = 0;
-    combo = 0;
-    comboTimer = 0;
-    destroyedCount = 0;
-    difficultyLevel = RemoteConfigService.instance.baseDifficulty;
-    if (difficultyLevel < 1) difficultyLevel = 1;
-    difficultyTimer = 0;
-    powerUpTimer = 0;
-    spawnTimer = 0;
-    state = GameState.menu;
+    if (state == GameState.playing || state == GameState.paused) {
+      pauseEngine();
+      state = GameState.paused;
+      saveGameState();
+    } else if (state == GameState.gameOver) {
+      clearGameState();
+      _resetWorld();
+      state = GameState.menu;
+    }
   }
 
   void restart() {
     overlays.remove('GameOver');
     overlays.remove('MainMenu');
+    overlays.remove('PauseMenu');
     resumeEngine();
 
-    children.whereType<Asteroid>().forEach((o) => o.removeFromParent());
-    children.whereType<Bullet>().forEach((b) => b.removeFromParent());
-    children.whereType<Explosion>().forEach((e) => e.removeFromParent());
-    children.whereType<PowerUp>().forEach((p) => p.removeFromParent());
+    _resetWorld();
 
     score = 0;
     combo = 0;
@@ -259,5 +353,20 @@ class GalaxyFighterGame extends FlameGame
     spawnTimer = 0;
     state = GameState.playing;
     player.reset();
+    clearGameState();
+  }
+
+  void _resetWorld() {
+    children.whereType<Asteroid>().forEach((o) => o.removeFromParent());
+    children.whereType<Bullet>().forEach((b) => b.removeFromParent());
+    children.whereType<Explosion>().forEach((e) => e.removeFromParent());
+    children.whereType<PowerUp>().forEach((p) => p.removeFromParent());
+  }
+
+  @override
+  void onRemove() {
+    shootPool.dispose();
+    explosionPool.dispose();
+    super.onRemove();
   }
 }
