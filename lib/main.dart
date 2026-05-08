@@ -11,6 +11,8 @@ import 'utils/firebase_options.dart';
 import 'utils/remote_config_service.dart';
 import 'utils/storage_service.dart';
 import 'utils/settings_provider.dart';
+import 'utils/user_service.dart';
+import 'utils/cloud_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'game.dart';
 
@@ -31,6 +33,7 @@ void main() async {
   // Initialize Services
   await StorageService().init();
   await RemoteConfigService.instance.initialize();
+  await UserService().init();
 
   final settingsProvider = SettingsProvider.instance;
   await settingsProvider.init();
@@ -147,44 +150,102 @@ class _MainMenuOverlayState extends State<MainMenuOverlay> {
 
   void _showHallOfFameDialog(BuildContext context) {
     showDialog(context: context, builder: (context) {
-      return AlertDialog(
-        backgroundColor: const Color(0xFF0D1B2A),
-        shape: RoundedRectangleBorder(
-          side: const BorderSide(color: Color(0xFFFFAB00), width: 2),
-          borderRadius: BorderRadius.circular(20),
-        ),
-        title: const Text('HALL OF FAME', style: TextStyle(color: Color(0xFFFFAB00), letterSpacing: 2, fontWeight: FontWeight.bold)),
-        content: FutureBuilder<SharedPreferences>(
-          future: SharedPreferences.getInstance(),
-          builder: (context, snapshot) {
-            if (!snapshot.hasData) return const SizedBox(height: 50, child: Center(child: CircularProgressIndicator(color: Color(0xFFFFAB00))));
-            final prefs = snapshot.data!;
-            final scores = prefs.getStringList('top_scores') ?? [];
-            if (scores.isEmpty) {
-              return const Text('No scores yet. Play a game to rank up!', style: TextStyle(color: Colors.white));
-            }
-            return SizedBox(
-              width: double.maxFinite,
-              child: ListView.builder(
-                shrinkWrap: true,
-                itemCount: scores.length,
-                itemBuilder: (context, index) {
-                  return ListTile(
-                    leading: Text('#${index + 1}', style: const TextStyle(color: Color(0xFFFFAB00), fontSize: 20, fontWeight: FontWeight.bold)),
-                    title: Text('${scores[index]}         PTS', style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
-                    trailing: const Icon(Icons.star, color: Color(0xFFFFAB00), size: 32),
-                  );
-                },
-              ),
-            );
-          },
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('CLOSE', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-          )
-        ],
+      return StatefulBuilder(
+        builder: (context, setState) {
+          return AlertDialog(
+            backgroundColor: const Color(0xFF0D1B2A),
+            shape: RoundedRectangleBorder(
+              side: const BorderSide(color: Color(0xFFFFAB00), width: 2),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            title: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('HALL OF FAME', style: TextStyle(color: Color(0xFFFFAB00), letterSpacing: 2, fontWeight: FontWeight.bold)),
+                IconButton(
+                  icon: const Icon(Icons.edit, color: Colors.white70),
+                  onPressed: () async {
+                    String tempName = UserService().userName;
+                    String? newName = await showDialog<String>(
+                      context: context,
+                      builder: (context) {
+                        return AlertDialog(
+                          backgroundColor: const Color(0xFF0D1B2A),
+                          title: const Text('Edit Pilot Name', style: TextStyle(color: Colors.white)),
+                          content: TextField(
+                            style: const TextStyle(color: Colors.white),
+                            decoration: const InputDecoration(
+                              enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFFFAB00))),
+                              focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFFFAB00))),
+                            ),
+                            onChanged: (val) => tempName = val,
+                            controller: TextEditingController(text: tempName),
+                          ),
+                          actions: [
+                            TextButton(onPressed: () => Navigator.pop(context), child: const Text('CANCEL', style: TextStyle(color: Colors.white70))),
+                            TextButton(onPressed: () => Navigator.pop(context, tempName), child: const Text('SAVE', style: TextStyle(color: Color(0xFFFFAB00)))),
+                          ],
+                        );
+                      }
+                    );
+                    if (newName != null && newName.trim().isNotEmpty) {
+                      await UserService().updateUserName(newName.trim());
+                      setState(() {});
+                    }
+                  },
+                ),
+              ],
+            ),
+            content: FutureBuilder<List<Map<String, dynamic>>>(
+              future: CloudService().fetchHallOfFame(forceRefresh: true),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const SizedBox(height: 50, child: Center(child: CircularProgressIndicator(color: Color(0xFFFFAB00))));
+                }
+                if (snapshot.hasError) {
+                  return const Text('Failed to connect to galactic comms. Please check your network.', style: TextStyle(color: Colors.redAccent));
+                }
+                final scores = snapshot.data ?? [];
+                if (scores.isEmpty) {
+                  return const Text('No pilots in the Hall of Fame yet.', style: TextStyle(color: Colors.white));
+                }
+                return SizedBox(
+                  width: double.maxFinite,
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: scores.length,
+                    itemBuilder: (context, index) {
+                      final data = scores[index];
+                      final bool isMe = data['id'] == UserService().deviceId;
+                      final rankColors = [const Color(0xFFFFD700), const Color(0xFFC0C0C0), const Color(0xFFCD7F32)];
+                      final rankColor = index < 3 ? rankColors[index] : const Color(0xFFFFAB00);
+                      
+                      return Container(
+                        margin: const EdgeInsets.symmetric(vertical: 4),
+                        decoration: isMe ? BoxDecoration(
+                          border: Border.all(color: const Color(0xFF00E676), width: 1.5),
+                          borderRadius: BorderRadius.circular(8),
+                          color: const Color(0xFF00E676).withOpacity(0.1),
+                        ) : null,
+                        child: ListTile(
+                          leading: Text('#${index + 1}', style: TextStyle(color: rankColor, fontSize: 20, fontWeight: FontWeight.bold)),
+                          title: Text(data['userName'] ?? 'Unknown', style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
+                          trailing: Text('${data['highScore']}', style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                        ),
+                      );
+                    },
+                  ),
+                );
+              },
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('CLOSE', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              )
+            ],
+          );
+        }
       );
     });
   }
@@ -240,6 +301,7 @@ class _MainMenuOverlayState extends State<MainMenuOverlay> {
     });
   }
 
+  @override
   Widget build(BuildContext context) {
     return Material(
       color: Colors.black.withAlpha(200),

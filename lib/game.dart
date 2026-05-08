@@ -2,7 +2,6 @@ import 'dart:math';
 import 'package:flame/events.dart';
 import 'package:flame/game.dart';
 import 'package:flame/components.dart';
-import 'package:flame/collisions.dart';
 import 'package:flame/input.dart';
 import 'package:flutter/material.dart';
 import 'package:flame_audio/flame_audio.dart';
@@ -11,6 +10,8 @@ import 'utils/storage_service.dart';
 import 'utils/remote_config_service.dart';
 import 'utils/analytics_service.dart';
 import 'utils/settings_provider.dart';
+import 'utils/cloud_service.dart';
+import 'utils/user_service.dart';
 import 'components/player.dart';
 import 'components/asteroid.dart';
 import 'components/bullet.dart';
@@ -163,6 +164,11 @@ class GalaxyFighterGame extends FlameGame
       highScore = score;
       StorageService().setHighScore(highScore);
     }
+    
+    // Attempt to sync score to cloud leaderboard
+    final deviceId = UserService().deviceId;
+    final userName = UserService().userName;
+    CloudService().updateScore(deviceId, userName, score);
 
     // Add score to Hall of Fame list
     SharedPreferences.getInstance().then((prefs) {

@@ -1,6 +1,5 @@
 import 'dart:ui';
 import 'package:flame/components.dart';
-import 'package:flutter/material.dart' show Colors;
 import '../game.dart';
 
 class Background extends SpriteComponent
