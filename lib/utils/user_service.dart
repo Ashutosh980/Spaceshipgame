@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io';
@@ -47,5 +48,11 @@ class UserService {
     _userName = newName;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('userName', newName);
+    // 2. Sync to Firestore so others can see the name in the Top 10
+    String deviceId = await _generateDeviceId();
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(deviceId)
+        .update({'userName': newName});
   }
 }
