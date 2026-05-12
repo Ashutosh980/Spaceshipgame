@@ -23,6 +23,7 @@ enum GameEvent {
   gameResumed,
   gameOver,
   gameRestarted,
+  levelUp,
 }
 
 typedef GameEventHandler = void Function(GameEvent event, {dynamic data});

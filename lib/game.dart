@@ -5,6 +5,7 @@ import 'package:flame/components.dart';
 import 'package:flame/input.dart';
 import 'package:flutter/material.dart';
 import 'package:flame_audio/flame_audio.dart';
+import 'package:galaxy_fighter/utils/screen_shake.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'utils/storage_service.dart';
 import 'utils/remote_config_service.dart';
@@ -13,6 +14,7 @@ import 'utils/settings_provider.dart';
 import 'utils/cloud_service.dart';
 import 'utils/user_service.dart';
 import 'utils/game_event_bus.dart';
+import 'utils/floating_text.dart';
 import 'components/player.dart';
 import 'components/asteroid.dart';
 import 'components/bullet.dart';
@@ -50,6 +52,7 @@ class GalaxyFighterGame extends FlameGame
   int score = 0;
   int highScore = 0;
   int destroyedCount = 0;
+  int _lastKnownLevel = 1;
 
   GameState state = GameState.menu;
   bool hasSavedGame = false;
@@ -94,6 +97,7 @@ class GalaxyFighterGame extends FlameGame
 
     // Difficulty scaler — owns ramp logic
     difficultyScaler = DifficultyScaler(difficultyLevel: startDifficulty);
+    _lastKnownLevel = startDifficulty;
     add(difficultyScaler);
 
     // Event bus listeners owned by game.dart
@@ -207,6 +211,21 @@ class GalaxyFighterGame extends FlameGame
     // DifficultyScaler updates itself; just read current level for spawning
     if (state != GameState.playing) return;
 
+    if (difficultyScaler.difficultyLevel > _lastKnownLevel) {
+      final oldLevel = _lastKnownLevel;
+      _lastKnownLevel = difficultyScaler.difficultyLevel;
+      
+      add(FloatingText(
+        position: size / 2,
+        text: 'LEVEL $oldLevel COMPLETED',
+        color: Colors.yellow,
+        duration: 2.0,
+      ));
+      
+      GameEventBus.instance.emit(GameEvent.levelUp);
+      playSfx('level_up.wav');
+    }
+
     // Spawn asteroids
     spawnTimer += dt;
     if (spawnTimer > difficultyScaler.spawnRate) {
@@ -257,6 +276,7 @@ class GalaxyFighterGame extends FlameGame
     score = prefs.getInt('saved_score') ?? 0;
     player.lives = prefs.getInt('saved_lives') ?? 3;
     difficultyScaler.reset(prefs.getInt('saved_difficulty') ?? 1);
+    _lastKnownLevel = difficultyScaler.difficultyLevel;
     destroyedCount = prefs.getInt('saved_destroyed') ?? 0;
   }
 
@@ -321,6 +341,7 @@ class GalaxyFighterGame extends FlameGame
     final startDifficulty =
         RemoteConfigService.instance.baseDifficulty.clamp(1, 999);
     difficultyScaler.reset(startDifficulty);
+    _lastKnownLevel = startDifficulty;
 
     state = GameState.playing;
     player.reset();
@@ -346,5 +367,12 @@ class GalaxyFighterGame extends FlameGame
     shootPool.dispose();
     explosionPool.dispose();
     super.onRemove();
+  }
+
+  void screenshake({required double duration, required double intensity}) {
+    add(ScreenShakeEffect(
+      duration: duration,
+      intensity: intensity.clamp(0.0, 1.0),
+    ));
   }
 }
