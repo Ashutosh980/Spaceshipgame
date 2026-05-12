@@ -38,7 +38,7 @@ class Asteroid extends SpriteComponent
     position.y += speed * dt;
     angle += rotationSpeed * dt;
     if (position.y > gameRef.size.y + size.y) {
-      removeFromParent();
+      if (!isRemoved) removeFromParent();
     }
   }
 }

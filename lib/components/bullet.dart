@@ -1,6 +1,7 @@
 import 'package:flame/components.dart';
 import 'package:flame/collisions.dart';
 import 'package:flutter/material.dart';
+import 'package:galaxy_fighter/utils/game_event_bus.dart';
 import '../game.dart';
 import 'asteroid.dart';
 import 'explosion.dart';
@@ -51,7 +52,7 @@ class Bullet extends PositionComponent
     super.update(dt);
     position.y -= speed * dt;
     if (position.y < -size.y) {
-      removeFromParent();
+      if (!isRemoved) removeFromParent();
     }
   }
 
@@ -63,10 +64,10 @@ class Bullet extends PositionComponent
         gameRef.playSfx('explosion.wav');
         // Spawn explosion at asteroid position
         gameRef.add(Explosion(position: other.position.clone()));
-        other.removeFromParent();
-        gameRef.onAsteroidDestroyed();
+        if (!other.isRemoved) other.removeFromParent();
+        GameEventBus.instance.emit(GameEvent.asteroidDestroyed);
       }
-      removeFromParent();
+      if (!isRemoved) removeFromParent();
     }
     super.onCollision(intersectionPoints, other);
   }

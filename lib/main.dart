@@ -568,7 +568,7 @@ class GameOverOverlay extends StatelessWidget {
                   const Color(0xFFFF6D00)),
               const SizedBox(height: 8),
               _statRow(
-                  'LEVEL', '${game.difficultyLevel}', const Color(0xFF00E676)),
+                  'LEVEL', '${game.difficultyScaler.difficultyLevel}', const Color(0xFF00E676)),
               const SizedBox(height: 28),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
