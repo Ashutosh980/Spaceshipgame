@@ -13,6 +13,7 @@ import 'utils/storage_service.dart';
 import 'utils/settings_provider.dart';
 import 'utils/user_service.dart';
 import 'utils/cloud_service.dart';
+import 'utils/performance_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'game.dart';
 
@@ -38,10 +39,21 @@ void main() async {
   final settingsProvider = SettingsProvider.instance;
   await settingsProvider.init();
   
+  // Initialize Performance Service
+  // TODO: Wrap this in your GDPR consent logic
+  final hasConsent = true; // Replace with actual consent check
+  await PerformanceService.instance.setCollectionEnabled(hasConsent);
+
+  // Example: Track App Start to Game Ready
+  await PerformanceService.instance.startTrace('app_start_to_interactive');
+
   SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
 
   final game = GalaxyFighterGame();
+
+  // Stop the trace once the game engine is ready
+  await PerformanceService.instance.stopTrace('app_start_to_interactive');
 
   runApp(
     ChangeNotifierProvider.value(
