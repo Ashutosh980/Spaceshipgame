@@ -1,11 +1,28 @@
 import 'package:firebase_performance/firebase_performance.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class PerformanceService {
   PerformanceService._privateConstructor();
   static final PerformanceService instance = PerformanceService._privateConstructor();
 
-  final FirebasePerformance _performance = FirebasePerformance.instance;
+  static const _consentKey = 'performance_collection_consent';
+
   final Map<String, Trace> _activeTraces = {};
+
+  /// Lazy — Firebase must be initialized before first access.
+  FirebasePerformance get _performance => FirebasePerformance.instance;
+
+  /// Reads stored consent; defaults to true until a GDPR flow is wired in.
+  Future<bool> loadConsent() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_consentKey) ?? true;
+  }
+
+  Future<void> setConsent(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_consentKey, enabled);
+    await setCollectionEnabled(enabled);
+  }
 
   /// Enable or disable performance collection based on GDPR/UMP consent
   Future<void> setCollectionEnabled(bool enabled) async {

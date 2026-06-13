@@ -14,6 +14,7 @@ import 'utils/settings_provider.dart';
 import 'utils/cloud_service.dart';
 import 'utils/user_service.dart';
 import 'utils/game_event_bus.dart';
+import 'utils/performance_service.dart';
 import 'utils/floating_text.dart';
 import 'components/player.dart';
 import 'components/asteroid.dart';
@@ -23,6 +24,9 @@ import 'components/power_up.dart';
 import 'components/background.dart';
 import 'components/hud_component.dart';
 import 'components/difficulty_scaler.dart';
+import 'components/boss.dart';
+import 'components/boss_config.dart';
+import 'components/enemy_bullet.dart';
 
 enum GameState { menu, playing, paused, gameOver }
 
@@ -53,6 +57,10 @@ class GalaxyFighterGame extends FlameGame
   int highScore = 0;
   int destroyedCount = 0;
   int _lastKnownLevel = 1;
+
+  bool isBossFightActive = false;
+  double _bossWarningTimer = 0;
+  int? _pendingBossNumber;
 
   GameState state = GameState.menu;
   bool hasSavedGame = false;
@@ -102,18 +110,25 @@ class GalaxyFighterGame extends FlameGame
 
     // Event bus listeners owned by game.dart
     GameEventBus.instance.on(GameEvent.asteroidDestroyed, _onAsteroidDestroyed);
+    GameEventBus.instance.on(GameEvent.bossDefeated, _onBossDefeated);
+
+    await PerformanceService.instance.stopTrace('app_start_to_interactive');
   }
 
   // ----------------------------------------------------------- Audio helpers
 
   void playSfx(String file) {
     if (!SettingsProvider.instance.sfxEnabled) return;
-    if (file == 'shoot.wav') {
-      shootPool.start(volume: 0.6);
-    } else if (file == 'explosion.wav') {
-      explosionPool.start(volume: 0.6);
-    } else {
-      FlameAudio.play(file, volume: 0.6);
+    try {
+      if (file == 'shoot.wav') {
+        shootPool.start(volume: 0.6);
+      } else if (file == 'explosion.wav') {
+        explosionPool.start(volume: 0.6);
+      } else {
+        FlameAudio.play(file, volume: 0.6);
+      }
+    } catch (e) {
+      debugPrint('SFX error: $file - $e');
     }
   }
 
@@ -122,10 +137,71 @@ class GalaxyFighterGame extends FlameGame
   void _onAsteroidDestroyed(GameEvent event, {dynamic data}) {
     if (state != GameState.playing) return;
     destroyedCount++;
-    final multiplier = hud.comboMultiplier; // combo is tracked inside HUD
-    score += 10 * multiplier;
-    // Sync updated score to HUD
+    if (data is ({int combo, int multiplier, int points})) {
+      score += data.points;
+    } else {
+      score += 10 * hud.comboMultiplier;
+    }
     hud.score = score;
+  }
+
+  void _onBossDefeated(GameEvent event, {dynamic data}) {
+    if (state != GameState.playing) return;
+    isBossFightActive = false;
+    _pendingBossNumber = null;
+    _bossWarningTimer = 0;
+    difficultyScaler.resume();
+    destroyedCount++;
+
+    if (data is ({int combo, int multiplier, int points})) {
+      score += data.points;
+    }
+    hud.score = score;
+
+    add(Explosion(position: size / 2));
+    add(FloatingText(
+      position: size / 2,
+      text: 'BOSS DEFEATED!',
+      color: Colors.greenAccent,
+      duration: 2.5,
+    ));
+  }
+
+  void _startBossFight(int bossNumber) {
+    if (isBossFightActive || children.whereType<Boss>().isNotEmpty) return;
+
+    isBossFightActive = true;
+    difficultyScaler.pause();
+    _clearWaveEntities();
+
+    _pendingBossNumber = bossNumber;
+    _bossWarningTimer = 2.0;
+
+    final config = BossConfig.forBoss(bossNumber);
+    add(FloatingText(
+      position: size / 2,
+      text: '⚠️ ${config.title} INCOMING!',
+      color: Colors.redAccent,
+      duration: 2.0,
+    ));
+    GameEventBus.instance.emit(GameEvent.bossSpawned, data: bossNumber);
+  }
+
+  void _spawnBoss(int bossNumber) {
+    if (children.whereType<Boss>().isNotEmpty) return;
+    add(Boss(
+      config: BossConfig.forBoss(bossNumber),
+      screenSize: size,
+    ));
+  }
+
+  void _clearWaveEntities() {
+    for (final asteroid in children.whereType<Asteroid>()) {
+      if (!asteroid.isRemoved) asteroid.removeFromParent();
+    }
+    for (final bullet in children.whereType<EnemyBullet>()) {
+      if (!bullet.isRemoved) bullet.removeFromParent();
+    }
   }
 
   // ----------------------------------------------------------- Game over
@@ -223,8 +299,21 @@ class GalaxyFighterGame extends FlameGame
       ));
       
       GameEventBus.instance.emit(GameEvent.levelUp);
-      playSfx('level_up.wav');
+
+      if (difficultyScaler.difficultyLevel % 10 == 0) {
+        _startBossFight(difficultyScaler.difficultyLevel ~/ 10);
+      }
     }
+
+    if (_bossWarningTimer > 0) {
+      _bossWarningTimer -= dt;
+      if (_bossWarningTimer <= 0 && _pendingBossNumber != null) {
+        _spawnBoss(_pendingBossNumber!);
+        _pendingBossNumber = null;
+      }
+    }
+
+    if (isBossFightActive) return;
 
     // Spawn asteroids
     spawnTimer += dt;
@@ -337,6 +426,9 @@ class GalaxyFighterGame extends FlameGame
     destroyedCount = 0;
     spawnTimer = 0;
     powerUpTimer = 0;
+    isBossFightActive = false;
+    _bossWarningTimer = 0;
+    _pendingBossNumber = null;
 
     final startDifficulty =
         RemoteConfigService.instance.baseDifficulty.clamp(1, 999);
@@ -351,10 +443,29 @@ class GalaxyFighterGame extends FlameGame
   }
 
   void _resetWorld() {
-    children.whereType<Asteroid>().forEach((o) => o.removeFromParent());
-    children.whereType<Bullet>().forEach((b) => b.removeFromParent());
-    children.whereType<Explosion>().forEach((e) => e.removeFromParent());
-    children.whereType<PowerUp>().forEach((p) => p.removeFromParent());
+    for (final o in children.whereType<Asteroid>()) {
+      if (!o.isRemoved) o.removeFromParent();
+    }
+    for (final b in children.whereType<Bullet>()) {
+      if (!b.isRemoved) b.removeFromParent();
+    }
+    for (final e in children.whereType<Explosion>()) {
+      if (!e.isRemoved) e.removeFromParent();
+    }
+    for (final p in children.whereType<PowerUp>()) {
+      if (!p.isRemoved) p.removeFromParent();
+    }
+    for (final boss in children.whereType<Boss>()) {
+      if (!boss.isRemoved) boss.removeFromParent();
+    }
+    for (final eb in children.whereType<EnemyBullet>()) {
+      if (!eb.isRemoved) eb.removeFromParent();
+    }
+    isBossFightActive = false;
+    _bossWarningTimer = 0;
+    _pendingBossNumber = null;
+    difficultyScaler.resume();
+    hud.showBossBar = false;
   }
 
   // --------------------------------------------------------------- Dispose
@@ -363,6 +474,7 @@ class GalaxyFighterGame extends FlameGame
   void onRemove() {
     GameEventBus.instance.off(
         GameEvent.asteroidDestroyed, _onAsteroidDestroyed);
+    GameEventBus.instance.off(GameEvent.bossDefeated, _onBossDefeated);
     GameEventBus.instance.clear();
     shootPool.dispose();
     explosionPool.dispose();

@@ -6,6 +6,7 @@ import '../game.dart';
 import 'asteroid.dart';
 import 'bullet.dart';
 import 'power_up.dart';
+import 'enemy_bullet.dart';
 
 class Player extends SpriteComponent
     with CollisionCallbacks, HasGameRef<GalaxyFighterGame> {
@@ -164,25 +165,35 @@ class Player extends SpriteComponent
     }
   }
 
+  void takeHit({PositionComponent? source}) {
+    if (_invincibleTimer > 0) return;
+
+    if (hasShield) {
+      hasShield = false;
+      shieldTimer = 0;
+      if (source != null && !source.isRemoved) source.removeFromParent();
+      return;
+    }
+
+    lives--;
+    _invincibleTimer = 1.5;
+    if (source != null && !source.isRemoved) source.removeFromParent();
+    if (lives <= 0) {
+      gameRef.gameOver();
+    }
+  }
+
   @override
   void onCollision(Set<Vector2> intersectionPoints, PositionComponent other) {
     if (other is Asteroid) {
-      if (hasShield) {
-        hasShield = false;
-        shieldTimer = 0;
-        other.removeFromParent();
-      } else if (_invincibleTimer <= 0) {
-        lives--;
-        _invincibleTimer = 1.5;
-        other.removeFromParent();
-        if (lives <= 0) {
-          gameRef.gameOver();
-        }
-      }
+      takeHit(source: other);
+    }
+    if (other is EnemyBullet) {
+      takeHit(source: other);
     }
     if (other is PowerUp) {
       applyPowerUp(other.type);
-      other.removeFromParent();
+      if (!other.isRemoved) other.removeFromParent();
     }
     super.onCollision(intersectionPoints, other);
   }

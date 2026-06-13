@@ -60,7 +60,7 @@ class PowerUp extends PositionComponent
     position.y += speed * dt;
     _glowPhase += dt * 4;
     if (position.y > gameRef.size.y + size.y) {
-      removeFromParent();
+      if (!isRemoved) removeFromParent();
     }
   }
 

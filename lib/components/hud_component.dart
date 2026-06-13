@@ -16,6 +16,11 @@ class HUDComponent extends Component {
   int lives = 0;
   bool visible = false;
 
+  bool showBossBar = false;
+  String bossTitle = '';
+  int bossCurrentHealth = 0;
+  int bossMaxHealth = 0;
+
   // Internal combo state (owned entirely by HUD)
   int _combo = 0;
   double _comboTimer = 0;
@@ -24,9 +29,33 @@ class HUDComponent extends Component {
   late TextComponent _comboText;
   late TextComponent _livesText;
   late TextComponent _pauseButtonText;
+  late TextComponent _bossNameText;
+  late TextComponent _bossHealthText;
 
-  // Expose combo so game.dart can reset it on restart
   int get combo => _combo;
+
+  /// Records a kill, increments combo, and returns scoring info for juice + score.
+  ({int combo, int multiplier, int points}) recordKill() {
+    _combo++;
+    _comboTimer = 2.0;
+    if (_combo > 1) {
+      _comboText.text = '🔥 ${_combo}x COMBO!';
+    }
+    final multiplier = _combo > 1 ? _combo : 1;
+    return (combo: _combo, multiplier: multiplier, points: 10 * multiplier);
+  }
+
+  /// Big bonus when a boss is defeated; scales with boss number and combo.
+  ({int combo, int multiplier, int points}) recordBossDefeat(int bossNumber) {
+    _combo++;
+    _comboTimer = 2.0;
+    if (_combo > 1) {
+      _comboText.text = '🔥 ${_combo}x COMBO!';
+    }
+    final multiplier = _combo > 1 ? _combo : 1;
+    final points = 100 * bossNumber * multiplier;
+    return (combo: _combo, multiplier: multiplier, points: points);
+  }
 
   @override
   Future<void> onLoad() async {
@@ -86,10 +115,44 @@ class HUDComponent extends Component {
       ),
     );
 
-    addAll([_scoreText, _comboText, _livesText, _pauseButtonText]);
+    _bossNameText = TextComponent(
+      text: '',
+      position: Vector2(gameSize.x / 2, 95),
+      anchor: Anchor.topCenter,
+      textRenderer: TextPaint(
+        style: const TextStyle(
+          color: Color(0xFFFF1744),
+          fontSize: 16,
+          fontWeight: FontWeight.bold,
+          letterSpacing: 2,
+          shadows: [Shadow(color: Color(0xFFFF1744), blurRadius: 8)],
+        ),
+      ),
+    );
 
-    // Listen for asteroid destroyed events to drive the combo counter
-    GameEventBus.instance.on(GameEvent.asteroidDestroyed, _onAsteroidDestroyed);
+    _bossHealthText = TextComponent(
+      text: '',
+      position: Vector2(gameSize.x / 2, 118),
+      anchor: Anchor.topCenter,
+      textRenderer: TextPaint(
+        style: const TextStyle(
+          color: Color(0xFFFFAB00),
+          fontSize: 14,
+          fontWeight: FontWeight.bold,
+          letterSpacing: 1,
+        ),
+      ),
+    );
+
+    addAll([
+      _scoreText,
+      _comboText,
+      _livesText,
+      _pauseButtonText,
+      _bossNameText,
+      _bossHealthText,
+    ]);
+
     GameEventBus.instance.on(GameEvent.gameRestarted, _onGameRestarted);
   }
 
@@ -100,12 +163,27 @@ class HUDComponent extends Component {
       _livesText.text = '';
       _comboText.text = '';
       _pauseButtonText.text = '';
+      _bossNameText.text = '';
+      _bossHealthText.text = '';
       return;
     }
 
     _scoreText.text = 'SCORE: $score';
     _livesText.text = '♥' * lives;
     _pauseButtonText.text = '⏸';
+
+    if (showBossBar && bossMaxHealth > 0) {
+      final barWidth = 20;
+      final filled = ((bossCurrentHealth / bossMaxHealth) * barWidth)
+          .round()
+          .clamp(0, barWidth);
+      _bossNameText.text = bossTitle;
+      _bossHealthText.text =
+          '${'█' * filled}${'░' * (barWidth - filled)}  $bossCurrentHealth/$bossMaxHealth';
+    } else {
+      _bossNameText.text = '';
+      _bossHealthText.text = '';
+    }
 
     // Combo decay timer
     if (_comboTimer > 0) {
@@ -117,18 +195,14 @@ class HUDComponent extends Component {
     }
   }
 
-  void _onAsteroidDestroyed(GameEvent event, {dynamic data}) {
-    _combo++;
-    _comboTimer = 2.0;
-    if (_combo > 1) {
-      _comboText.text = '🔥 ${_combo}x COMBO!';
-    }
-  }
-
   void _onGameRestarted(GameEvent event, {dynamic data}) {
     _combo = 0;
     _comboTimer = 0;
     _comboText.text = '';
+    showBossBar = false;
+    bossTitle = '';
+    bossCurrentHealth = 0;
+    bossMaxHealth = 0;
   }
 
   /// Returns the current combo multiplier (minimum 1).
@@ -136,7 +210,6 @@ class HUDComponent extends Component {
 
   @override
   void onRemove() {
-    GameEventBus.instance.off(GameEvent.asteroidDestroyed, _onAsteroidDestroyed);
     GameEventBus.instance.off(GameEvent.gameRestarted, _onGameRestarted);
     super.onRemove();
   }

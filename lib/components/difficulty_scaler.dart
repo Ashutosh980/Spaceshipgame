@@ -18,10 +18,17 @@ class DifficultyScaler extends Component {
 
   static const double _rampIntervalSeconds = 15.0;
 
+  bool _paused = false;
+
   DifficultyScaler({required this.difficultyLevel});
+
+  void pause() => _paused = true;
+  void resume() => _paused = false;
+  bool get isPaused => _paused;
 
   @override
   void update(double dt) {
+    if (_paused) return;
     _timer += dt;
     if (_timer >= _rampIntervalSeconds) {
       _timer = 0;
@@ -40,6 +47,7 @@ class DifficultyScaler extends Component {
   void reset(int startLevel) {
     difficultyLevel = startLevel;
     _timer = 0;
+    _paused = false;
   }
 
   /// Current asteroid spawn rate in seconds (clamped between 0.25 and 0.8).

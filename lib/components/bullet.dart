@@ -4,9 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:galaxy_fighter/utils/game_event_bus.dart';
 import '../game.dart';
 import 'asteroid.dart';
+import 'boss.dart';
 import 'explosion.dart';
-import '../utils/floating_text.dart'; // 🧃 Added import
-import '../utils/screen_shake.dart'; // 🧃 Added import
+import '../utils/floating_text.dart';
 
 class Bullet extends PositionComponent
     with CollisionCallbacks, HasGameRef<GalaxyFighterGame> {
@@ -62,46 +62,45 @@ class Bullet extends PositionComponent
   void onCollision(Set<Vector2> intersectionPoints, PositionComponent other) {
     if (other is Asteroid) {
       other.health--;
-      
+
       if (other.health <= 0) {
-        // 1. Get the current combo state from the HUD
-        // We add 1 because the EventBus hasn't updated the HUD's internal counter yet
-        final currentCombo = gameRef.hud.combo + 1; 
-        final currentMultiplier = (currentCombo > 1) ? currentCombo : 1;
+        final kill = gameRef.hud.recordKill();
 
         gameRef.playSfx('explosion.wav');
         gameRef.add(Explosion(position: other.position.clone()));
-        
-        // 🧃 JUICE: Screen Shake (intensity scales with the new combo)
+
         gameRef.screenshake(
           duration: 0.15,
-          intensity: (currentCombo * 0.1).clamp(0.2, 1.0),
+          intensity: (kill.combo * 0.1).clamp(0.2, 1.0),
         );
 
-        // 🧃 JUICE: Floating Damage/Score Text
-        final points = 10 * currentMultiplier;
         gameRef.add(FloatingText(
           position: other.position.clone(),
-          text: '+$points',
+          text: '+${kill.points}',
           color: Color.lerp(
             Colors.yellow,
             Colors.red,
-            (currentCombo / 10).clamp(0.0, 1.0),
+            (kill.combo / 10).clamp(0.0, 1.0),
           ) ?? Colors.yellow,
         ));
 
-        // 2. Clean up the asteroid
         if (!other.isRemoved) other.removeFromParent();
 
-        // 3. Tell the HUD to increment the combo and update the score
-        GameEventBus.instance.emit(GameEvent.asteroidDestroyed);
-        
-      } else {
-        // 🧃 JUICE: Hit feedback when damaged but not destroyed
-        //gameRef.playSfx('asteroid_hit.wav');
+        GameEventBus.instance.emit(
+          GameEvent.asteroidDestroyed,
+          data: kill,
+        );
       }
-      
-      // 4. Remove the bullet
+
+      if (!isRemoved) removeFromParent();
+    } else if (other is Boss) {
+      other.takeDamage(1);
+      gameRef.add(FloatingText(
+        position: other.position.clone(),
+        text: '-1',
+        color: Colors.orange,
+        duration: 0.6,
+      ));
       if (!isRemoved) removeFromParent();
     }
     super.onCollision(intersectionPoints, other);
